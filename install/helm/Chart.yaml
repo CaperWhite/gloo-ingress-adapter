@@ -1,0 +1,6 @@
+apiVersion: v2
+name: gloo-ingress-adapter
+description: Use ingress resources with Gloo gateways
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

@@ -1,0 +1,15 @@
+.cr-release-packages
+.dockerignore
+.rubocop.yml
+.vscode
+*~
+\#*\#
+bin
+build
+Dockerfile.erb
+install
+pkg
+rake
+Rakefile
+secrets.toml
+

@@ -1,0 +1,37 @@
+replicaCount: 1
+
+ingressClassName: gloo-route
+
+image:
+  repository: caperwhite/gloo-ingress-adapter
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 789
+
+resources: {}
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

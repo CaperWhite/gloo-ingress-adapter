@@ -1,0 +1,57 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "bundler"
+Dir.chdir(__dir__) { Bundler.require }
+
+require "logger"
+require "optparse"
+require "pathname"
+
+$stdout.sync = true
+
+ControllerOptions = Struct.new(:kubeconfig, :once, :log_level, :debug, keyword_init: true)
+options = ControllerOptions.new
+
+OptionParser.new do |parser|
+  parser.banner = "Usage: controller [arguments]"
+
+  parser.on("-c", "--kubeconfig=CONFIG", "Kubeconfig file to use") do |v|
+    options.kubeconfig = Pathname(v).expand_path
+  end
+
+  parser.on("-l", "--log-level=LEVEL", "Log level") do |v|
+    options.log_level = Logger::Severity.const_get(v.upcase)
+  end
+
+  parser.on("-d", "--debug", "Debug mode") do |v|
+    options.debug = v ? true : false
+  end
+end.parse!
+
+options.debug ||= false
+options.log_level ||= (options.debug ? Logger::DEBUG : Logger::INFO)
+
+command = ARGV.shift&.to_sym || :run
+logger = Logger.new($stdout, level: options.log_level)
+
+controller = GlooIngressAdapter::Controller.new(
+  kubeconfig: options.kubeconfig,
+  logger:,
+  route_table_builder: GlooIngressAdapter::RouteTableBuilder.new
+)
+
+begin
+  case command
+  when :run
+    controller.run
+  when :watch
+    controller.watch
+  else
+    warn "Unknown command '#{command}'"
+    exit 2
+  end
+rescue StandardError => e
+  logger.error(e.full_message)
+  exit 1
+end

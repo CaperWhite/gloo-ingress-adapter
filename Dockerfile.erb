@@ -1,0 +1,19 @@
+<% require "json" %>
+FROM ruby:<%= File.read(".ruby-version").chomp %>
+LABEL org.opencontainers.image.authors=<%= gemspec.authors.join(', ').to_json %> \
+    org.opencontainers.image.version=<%= gemspec.version.to_json %> \
+    org.opencontainers.image.vendor="CaperWhite GmbH" \
+    org.opencontainers.image.licenses=<%= gemspec.licenses.join(', ').to_json %> \
+    org.opencontainers.image.homepage=<%= gemspec.homepage.to_json %> \
+    org.opencontainers.image.title=<%= gemspec.summary.to_json %> \
+    org.opencontainers.image.description=<%= gemspec.description.split.join(" ").to_json %>
+COPY Gemfile Gemfile.lock *.gemspec .ruby-version /opt/ingress/
+RUN /usr/sbin/useradd --comment "Gloo Ingress Adapter" --home-dir /srv/ingress --create-home --shell /bin/false \
+    --uid 789 --system --user-group ingress \
+    && cd /opt/ingress \
+    && /usr/local/bin/bundle config set --local deployment 'true' \
+    && /usr/local/bin/bundle config set --local without 'development' \
+    && /usr/local/bin/bundle install
+COPY . /opt/ingress
+ENTRYPOINT ["/usr/local/bin/ruby", "/opt/ingress/cmd/gloo_ingress_adapter"]
+CMD ["watch"]

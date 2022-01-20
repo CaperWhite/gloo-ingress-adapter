@@ -1,0 +1,8 @@
+.DS_Store
+*~
+/.cr-release-packages/
+/build/
+/Dockerfile
+/pkg/
+/secrets.toml
+\#*\#

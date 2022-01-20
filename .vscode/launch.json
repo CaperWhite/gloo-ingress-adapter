@@ -1,0 +1,26 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug run",
+            "type": "Ruby",
+            "request": "launch",
+            "program": "${workspaceRoot}/cmd/gloo_ingress_adapter",
+            "args": [
+                "--kubeconfig",
+                "~/.kube/config"
+            ]
+        },
+        {
+            "name": "Debug watch",
+            "type": "Ruby",
+            "request": "launch",
+            "program": "${workspaceRoot}/cmd/gloo_ingress_adapter",
+            "args": [
+                "--kubeconfig",
+                "~/.kube/config",
+                "watch"
+            ]
+        }
+    ]
+}

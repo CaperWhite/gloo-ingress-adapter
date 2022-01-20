@@ -1,0 +1,79 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: ingress-test
+  name: ingress-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ingress-test
+  template:
+    metadata:
+      labels:
+        app: ingress-test
+    spec:
+      containers:
+        - image: ruby:3.1.0
+          name: ruby
+          command: [ruby]
+          args:
+            - "-e"
+            - |
+              #!/usr/bin/env ruby
+              # frozen_string_literal: true
+
+              require "bundler/inline"
+              require "json"
+
+              gemfile do
+                source "https://rubygems.org"
+                gem "webrick", "~> 1.7"
+              end
+
+              server = WEBrick::HTTPServer.new(Port: 8080)
+
+              JSON_CONTENT = WEBrick::HTTPUtils::DefaultMimeTypes["json"]
+
+              server.mount_proc("/stop") do |_request, response|
+                response.content_type = JSON_CONTENT
+                response.body = { result: true }.to_json
+                server.stop
+              end
+
+              server.mount_proc("/") do |request, response|
+                server.logger.info "Request '#{request.path}': headers=#{request.header.to_json}"
+                response.content_type = JSON_CONTENT
+                response.body = { result: true }.to_json
+              end
+
+              trap("INT") { server.shutdown }
+
+              puts "Starting server"
+
+              server.start
+          resources:
+            limits:
+              cpu: "1"
+              memory: "128Mi"
+      restartPolicy: Always
+      volumes:
+        - name: load-generator
+          configMap:
+            name: load-generator
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingress-test
+spec:
+  type: ClusterIP
+  selector:
+    app: ingress-test
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8080
+      targetPort: 8080

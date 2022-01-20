@@ -1,0 +1,25 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "json"
+require "webrick"
+
+server = WEBrick::HTTPServer.new(Port: 8080)
+
+JSON_CONTENT = WEBrick::HTTPUtils::DefaultMimeTypes["json"]
+
+server.mount_proc("/stop") do |_request, response|
+  response.content_type = JSON_CONTENT
+  response.body = { result: true }.to_json
+  server.stop
+end
+
+server.mount_proc("/") do |request, response|
+  server.logger.info "Request '#{request.path}': headers=#{request.header.to_json}"
+  response.content_type = JSON_CONTENT
+  response.body = { result: true }.to_json
+end
+
+trap("INT") { server.shutdown }
+
+server.start

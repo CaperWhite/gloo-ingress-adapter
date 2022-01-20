@@ -1,0 +1,16 @@
+{
+    "editor.formatOnSave": false,
+    "editor.rulers": [
+        120
+    ],
+    "editor.tabSize": 4,
+    "editor.trimAutoWhitespace": true,
+    "editor.useTabStops": false,
+    "files.encoding": "utf8",
+    "files.eol": "\n",
+    "files.insertFinalNewline": true,
+    "files.trimTrailingWhitespace": true,
+    "[ruby]": {
+        "editor.tabSize": 2
+    }
+}

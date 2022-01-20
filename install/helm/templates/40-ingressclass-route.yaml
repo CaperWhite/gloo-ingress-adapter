@@ -1,0 +1,6 @@
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  name: {{ .Values.ingressClassName }}
+spec:
+  controller: caperwhite.com/gloo-ingress-adapter
