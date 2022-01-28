@@ -4,7 +4,6 @@ require "active_support/core_ext/string"
 require "gloo_ingress_adapter/resource_observer"
 require "kubeclient"
 require "logger"
-require "retriable"
 require "set"
 require "yaml"
 
@@ -13,126 +12,155 @@ module GlooIngressAdapter
   class Controller
     CONTROLLER_NAME = "caperwhite.com/gloo-ingress-adapter"
 
-    RETRY_ON = {
-      StandardError: nil,
-    }.freeze
+    StopMessage = Class.new
 
     def initialize(kubeconfig:, logger:, route_table_builder:)
       @client_factory = ClientFactory.new(kubeconfig:, logger:).freeze
       @logger = logger
       @route_table_builder = route_table_builder
-      @ingress_classes = {}
-      @ingresses = {}
+      @active_ingress_classes = Set.new
+      @lock = Thread::Mutex.new
+      @queue = Thread::Queue.new
+
+      @ingress_class_observer = ResourceObserver.new(
+        type: "IngressClass",
+        name: "ingressclasses",
+        client: client_factory.create_client(version: "v1", api: "networking.k8s.io"),
+        queue:,
+        logger:
+      )
+
+      @ingress_observer = ResourceObserver.new(
+        type: "Ingress",
+        name: "ingresses",
+        client: client_factory.create_client(version: "v1", api: "networking.k8s.io"),
+        queue:,
+        logger:
+      )
     end
 
-    def run
-      logger.info("Running ingress adapter")
-    end
+    def run(watch: true)
+      logger.info("Running ingress adapter version #{VERSION}")
 
-    def watch
-      logger.info("Starting ingress adapter")
+      reset
 
-      queue = Thread::Queue.new
+      if watch
+        ingress_class_observer.start
+        ingress_observer.start
 
-      ingress_class_observer = create_ingress_class_observer
-
-      ingress_class_observer.start(queue:)
-
-      ingress_observer = create_ingress_observer
-
-      ingress_observer.start(queue:)
-
-      loop do
-        event = queue.shift
-        handle_event(event)
+        keep_watch
       end
-    rescue StandardError => e
-      log_exception(e)
+    end
+
+    def stop
+      @lock.synchronize do
+        @queue << StopMessage.new
+      end
     end
 
     protected
 
-    attr_reader :logger, :queue, :client_factory, :ingress_classes, :ingresses
+    attr_reader :logger, :queue, :client_factory, :ingress_classes, :ingress_class_observer, :ingress_observer
 
-    def update_ingress_class(ingress_class)
-      logger.info("Updating ingress class #{ingress_class.metadata.name}")
+    def reset
+      @ingress_classes = ingress_class_observer.list
 
-      existing_ingress_class = @ingress_classes[ingress_class.metadata.uid]
+      @active_ingress_classes = ingress_classes.select do |ingress_class|
+        ingress_class.spec.controller == CONTROLLER_NAME
+      end.map do |ingress_class|
+        ingress_class.metadata.name
+      end.to_set
 
-      @ingress_classes[ingress_class.metadata.uid] = ingress_class
+      logger.info("Active ingress classes: #{@active_ingress_classes.fuse(", ", empty: "<none>")}")
 
-      if @ingress_classes.empty?
-        logger.warn("Now handling no ingress classes")
-      else
-        logger.info("Now handling ingress classes #{@ingress_classes.values.map { |c| c.metadata.name }.join(", ")}")
-      end
+      ingresses = ingress_observer.list
 
-      controller_changed = existing_ingress_class.nil? ||
-                           ingress_class.spec.controller != existing_ingress_class.spec.controller
-
-      ingress_class_name_changed = existing_ingress_class.nil? ||
-                                   existing_ingress_class.metadata.name != ingress_class.metadata.name
-
-      if controller_changed
-        if ingress_class.spec.controller == CONTROLLER_NAME
-          update_ingresses(ingress_class:)
-        elsif existing_ingress_class && existing_ingress_class.spec.controller == CONTROLLER_NAME
-          delete_ingresses(ingress_class:) if controller_changed
-        end
-      elsif ingress_class_name_changed
-        update_ingresses(ingress_class:)
-      end
-    end
-
-    def update_ingresses(ingress_class:)
-      @ingresses.values.filter do |u|
-        u.spec.ingressClassName == ingress_class.metadata.name
-      end.each do |ingress|
+      ingresses.each do |ingress|
         update_ingress(ingress)
       end
     end
 
-    def delete_ingressses(ingress_class:)
-      @ingresses.values.filter do |u|
-        u.spec.ingressClassName == ingress_class.metadata.name
-      end.each do |ingress|
-        networking_client.delete_ingress(ingress.metadata.name, ingress.metadata.namespace)
+    def keep_watch
+      loop do
+        event = queue.shift
+
+        case event
+        when Kubeclient::Resource
+          handle_event(event)
+        when ResourceObserver::ResetMessage
+          reset
+        when StopMessage
+          break
+        else
+          raise "Unknown event #{event}"
+        end
+      end
+    rescue StandardError => e
+      logger.error(e)
+    ensure
+      failsafe do
+        ingress_class_observer.stop
+      end
+
+      failsafe do
+        ingress_observer.stop
       end
     end
 
-    def remove_ingress_class(uid:)
-      ingress_class = @ingress_classes.delete(uid) || raise("Unknown ingress class uid '#{uid}'")
+    def activate_ingress_class(ingress_class)
+      logger.info("Activating or updating ingress class #{ingress_class.metadata.name}")
 
-      logger.info("Removing ingress class #{ingress_class.metadata.name}")
+      if ingress_class.spec.controller == CONTROLLER_NAME
+        @active_ingress_classes << ingress_class.metadata.name
+      else
+        @active_ingress_classes.delete(ingress_class.metadata.name)
+      end
 
-      delete_ingresses(ingress_class:) if ingress_class.spec.controller == CONTROLLER_NAME
+      logger.info("Active ingress classes: #{@active_ingress_classes.fuse(", ", empty: "<none>")}")
 
-      ingress_class
+      activate_ingresses(ingress_class:) if ingress_class.spec.controller == CONTROLLER_NAME
+    end
+
+    def activate_ingresses(ingress_class:)
+      networking_client.get_ingresses.select do |ingress|
+        ingress.spec.ingressClassName == ingress_class.metadata.name
+      end.each do |ingress|
+        activate_ingress(ingress)
+      end
+    end
+
+    def deactivate_ingresses(ingress_class:)
+      networking_client.get_ingresses.select do |ingress|
+        ingress.spec.ingressClassName == ingress_class.metadata.name
+      end.each do |ingress|
+        deactivate_ingress(ingress)
+      end
+    end
+
+    def deactivate_ingress_class(ingress_class)
+      logger.info("Deactivating ingress class #{ingress_class.metadata.name}")
+
+      deactivate_ingresses(ingress_class:) if ingress_class.spec.controller == CONTROLLER_NAME
     end
 
     def update_ingress(ingress)
-      @ingresses[ingress.metadata.uid] = ingress
-
-      msg = <<~MSG.squish
-        #{ingress.metadata.name} (namespace: #{ingress.metadata.namespace},
-        ingressClass: #{ingress.spec.ingressClassName || "(none)"})
-      MSG
-
-      if ingress_class_names.include?(ingress.spec.ingressClassName)
-        logger.info("Updating ingress #{msg}")
-
-        update_route_table(ingress:)
+      if handle_ingress(ingress)
+        activate_ingress(ingress)
       else
-        logger.info("Ignoring ingress #{msg}")
+        deactivate_ingress(ingress)
       end
     end
 
-    def remove_ingress(uid:)
-      ingress = @ingress_classes.delete(uid) || raise("Unknown ingress class uid '#{uid}'")
+    def activate_ingress(ingress)
+      logger.info("Activating or updating ingress #{ingress_info(ingress)}")
 
-      logger.info("Removed ingress #{ingress.metadata.name} (namespace: #{ingress.metadata.namespace})")
+      update_route_table(ingress:)
+    end
 
-      ingress
+    def deactivate_ingress(ingress)
+      logger.info("Deactivating ingress #{ingress_info(ingress)}")
+
+      remove_route_table(ingress:)
     end
 
     def handle_event(event)
@@ -156,9 +184,9 @@ module GlooIngressAdapter
     def handle_ingress_class_event(event)
       case event.type
       when "ADDED", "MODIFIED"
-        update_ingress_class(event.object)
+        activate_ingress_class(event.object)
       when "DELETED"
-        remove_ingress_class(event.object.metadata.name)
+        deactivate_ingress_class(event.object)
       else
         logger.error("Unknown event type '#{event.type}'")
       end
@@ -176,9 +204,7 @@ module GlooIngressAdapter
     end
 
     def update_route_table(ingress:)
-      metadata = ingress.metadata
-
-      logger.info "Updating route table for ingress '#{metadata.name}' (namespace: '#{metadata.namespace}')"
+      logger.info "Updating route table for ingress #{ingress_info(ingress)}"
       logger.debug { ingress.to_nice_yaml }
 
       route_table = @route_table_builder.build(ingress:)
@@ -188,35 +214,24 @@ module GlooIngressAdapter
       gateway_client.apply_route_table(route_table, field_manager: "gloo-ingress-adapter", force: true)
     end
 
-    def create_ingress_class_observer
-      ResourceObserver.new(
-        kind: "ingressclasses",
-        client: client_factory.create_client(version: "v1", api: "networking.k8s.io"),
-        logger:
-      )
-    end
+    def remove_route_table(ingress:)
+      route_table = begin
+        gateway_client.get_route_table(ingress.metadata.name, ingress.metadata.namespace)
+      rescue Kubeclient::ResourceNotFoundError
+        nil
+      end
 
-    def create_ingress_observer
-      ResourceObserver.new(
-        kind: "ingresses",
-        client: client_factory.create_client(version: "v1", api: "networking.k8s.io"),
-        logger:
-      )
-    end
-
-    def ingress_class_names
-      @ingress_classes.values.map { |c| c.metadata.name }
-    end
-
-    def log_exception(exception)
-      logger.error("#{exception.message} (#{exception.class}/#{exception.class.ancestors})")
-      logger.debug(exception.backtrace.join("\n"))
+      if route_table && route_table.metadata.ownerReferences.any? { |owner| owner.uid == ingress.metadata.uid }
+        logger.info "Deleting route table for ingress #{ingress_info(ingress)}"
+        logger.debug { ingress.to_nice_yaml }
+        gateway_client.delete_route_table(ingress.metadata.name, ingress.metadata.namespace)
+      end
     end
 
     def failsafe
       yield
     rescue StandardError => e
-      log_exception(e)
+      logger.error(e)
       nil
     end
 
@@ -230,6 +245,18 @@ module GlooIngressAdapter
 
     def gateway_client
       @gateway_client ||= client_factory.create_client(version: "v1", api: "gateway.solo.io")
+    end
+
+    def handle_ingress(ingress)
+      @active_ingress_classes.include?(ingress.spec.ingressClassName)
+    end
+
+    def ingress_info(ingress)
+      <<~MSG.squish
+        #{ingress.metadata.name}
+          (namespace: #{ingress.metadata.namespace},
+          ingressClassName: #{ingress.spec.ingressClassName || "<none>"})
+      MSG
     end
   end
 end

@@ -10,11 +10,24 @@ require "pathname"
 
 $stdout.sync = true
 
-ControllerOptions = Struct.new(:kubeconfig, :once, :log_level, :debug, keyword_init: true)
+Signal.trap("QUIT") do
+  Thread.list.each do |thread|
+    $stdout.puts "--- #{["Thread", thread.name].compact.join(" ")} (#{thread.native_thread_id}) ---"
+    $stdout.puts thread.backtrace&.join("\n")
+  end
+end
+
+Thread.current.name = "main"
+
+ControllerOptions = Struct.new(:watch, :kubeconfig, :once, :log_level, :debug, keyword_init: true)
 options = ControllerOptions.new
 
 OptionParser.new do |parser|
   parser.banner = "Usage: controller [arguments]"
+
+  parser.on("-w", "--[no-]watch", "Continuously watch ingresses and update route tables instead of running once") do |v|
+    options.watch = v ? true : false
+  end
 
   parser.on("-c", "--kubeconfig=CONFIG", "Kubeconfig file to use") do |v|
     options.kubeconfig = Pathname(v).expand_path
@@ -30,9 +43,9 @@ OptionParser.new do |parser|
 end.parse!
 
 options.debug ||= false
+options.watch ||= false
 options.log_level ||= (options.debug ? Logger::DEBUG : Logger::INFO)
 
-command = ARGV.shift&.to_sym || :run
 logger = Logger.new($stdout, level: options.log_level)
 
 controller = GlooIngressAdapter::Controller.new(
@@ -41,16 +54,15 @@ controller = GlooIngressAdapter::Controller.new(
   route_table_builder: GlooIngressAdapter::RouteTableBuilder.new
 )
 
-begin
-  case command
-  when :run
-    controller.run
-  when :watch
-    controller.watch
-  else
-    warn "Unknown command '#{command}'"
-    exit 2
+Signal.trap("TERM") do
+  Thread.new do
+    logger.info("Terminating")
+    controller.stop
   end
+end
+
+begin
+  controller.run(watch: options.watch)
 rescue StandardError => e
   logger.error(e.full_message)
   exit 1

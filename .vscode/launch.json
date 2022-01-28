@@ -19,7 +19,7 @@
             "args": [
                 "--kubeconfig",
                 "~/.kube/config",
-                "watch"
+                "--watch"
             ]
         }
     ]

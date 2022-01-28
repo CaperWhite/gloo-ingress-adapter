@@ -2,5 +2,15 @@ apiVersion: v2
 name: gloo-ingress-adapter
 description: Use ingress resources with Gloo gateways
 type: application
-version: 0.1.0
-appVersion: "0.1.0"
+version: "0.1.1-dev"
+appVersion: "0.1.1.dev"
+keywords:
+  - gloo
+  - ingress
+home: https://github.com/CaperWhite/gloo-ingress-adapter
+sources:
+  - https://github.com/CaperWhite/gloo-ingress-adapter
+maintainers:
+  - name: CaperWhite GmbH
+    email: info@caperwhite.com
+    url: https://www.caperwhite.com

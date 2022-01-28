@@ -16,4 +16,4 @@ RUN /usr/sbin/useradd --comment "Gloo Ingress Adapter" --home-dir /srv/ingress -
     && /usr/local/bin/bundle install
 COPY . /opt/ingress
 ENTRYPOINT ["/usr/local/bin/ruby", "/opt/ingress/cmd/gloo_ingress_adapter"]
-CMD ["watch"]
+CMD ["--watch"]

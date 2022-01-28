@@ -4,7 +4,7 @@ $LOAD_PATH << File.expand_path("#{__dir__}/lib")
 
 Gem::Specification.new do |spec|
   spec.name = "gloo_ingress_adapter"
-  spec.version = "0.1.0"
+  spec.version = "0.1.1.dev"
   spec.authors = ["CaperWhite GmbH"]
   spec.email = ["info@caperwhite.com"]
   spec.summary = "Use ingress resources with Gloo gateways"
@@ -35,7 +35,6 @@ Gem::Specification.new do |spec|
 
   spec.add_dependency "activesupport", "~> 7.0"
   spec.add_dependency "kubeclient", "~> 4.9"
-  spec.add_dependency "retriable", "~> 3.1"
   spec.add_dependency "zeitwerk", "~> 2.4"
 
   spec.add_development_dependency "cheetah", "~> 1.0"
