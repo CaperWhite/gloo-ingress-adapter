@@ -123,7 +123,7 @@ module GlooIngressAdapter
 
     def activate_ingresses(ingress_class:)
       networking_client.get_ingresses.select do |ingress|
-        ingress.spec.ingressClassName == ingress_class.metadata.name
+        ingress_class_for_ingress(ingress) == ingress_class.metadata.name
       end.each do |ingress|
         activate_ingress(ingress)
       end
@@ -131,7 +131,7 @@ module GlooIngressAdapter
 
     def deactivate_ingresses(ingress_class:)
       networking_client.get_ingresses.select do |ingress|
-        ingress.spec.ingressClassName == ingress_class.metadata.name
+        ingress_class_for_ingress(ingress) == ingress_class.metadata.name
       end.each do |ingress|
         deactivate_ingress(ingress)
       end
@@ -248,14 +248,18 @@ module GlooIngressAdapter
     end
 
     def handle_ingress(ingress)
-      @active_ingress_classes.include?(ingress.spec.ingressClassName)
+      @active_ingress_classes.include?(ingress_class_for_ingress(ingress))
+    end
+
+    def ingress_class_for_ingress(ingress)
+      ingress.metadata.annotations["kubernetes.io/ingress.class"] || ingress.spec.ingress_class_name
     end
 
     def ingress_info(ingress)
       <<~MSG.squish
         #{ingress.metadata.name}
           (namespace: #{ingress.metadata.namespace},
-          ingressClassName: #{ingress.spec.ingressClassName || "<none>"})
+          ingressClassName: #{ingress_class_for_ingress(ingress) || "<none>"})
       MSG
     end
   end
