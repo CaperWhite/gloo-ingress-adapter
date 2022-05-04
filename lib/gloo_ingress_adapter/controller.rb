@@ -252,7 +252,7 @@ module GlooIngressAdapter
     end
 
     def ingress_class_for_ingress(ingress)
-      ingress.metadata.annotations["kubernetes.io/ingress.class"] || ingress.spec.ingress_class_name
+      ingress.metadata.annotations["kubernetes.io/ingress.class"] || ingress.spec.ingressClassName
     end
 
     def ingress_info(ingress)
