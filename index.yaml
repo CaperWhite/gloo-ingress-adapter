@@ -2,6 +2,26 @@ apiVersion: v1
 entries:
   gloo-ingress-adapter:
   - apiVersion: v2
+    appVersion: 0.1.1
+    created: "2022-07-23T13:49:50.974268+02:00"
+    description: Use ingress resources with Gloo gateways
+    digest: b4c764024de69a823cd23e1e5b0ba6d59441c00918f21bcb750341157af1ed0c
+    home: https://github.com/CaperWhite/gloo-ingress-adapter
+    keywords:
+    - gloo
+    - ingress
+    maintainers:
+    - email: info@caperwhite.com
+      name: CaperWhite GmbH
+      url: https://www.caperwhite.com
+    name: gloo-ingress-adapter
+    sources:
+    - https://github.com/CaperWhite/gloo-ingress-adapter
+    type: application
+    urls:
+    - https://github.com/CaperWhite/gloo-ingress-adapter/releases/download/0.1.1/gloo-ingress-adapter-0.1.1.tgz
+    version: 0.1.1
+  - apiVersion: v2
     appVersion: 0.1.0
     created: "2022-01-21T12:16:22.651545+01:00"
     description: Use ingress resources with Gloo gateways
@@ -11,4 +31,4 @@ entries:
     urls:
     - https://github.com/CaperWhite/gloo-ingress-adapter/releases/download/0.1.0/gloo-ingress-adapter-0.1.0.tgz
     version: 0.1.0
-generated: "2022-01-21T12:16:22.651553+01:00"
+generated: "2022-07-23T13:49:50.974281+02:00"
