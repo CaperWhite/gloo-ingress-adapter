@@ -35,7 +35,7 @@ Lint/Void:
     - generated/**/*
     - test/**/*
 Metrics/AbcSize:
-  Max: 30
+  Max: 35
 Metrics/BlockLength:
   Exclude:
     - '*.gemspec'

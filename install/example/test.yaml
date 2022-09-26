@@ -16,7 +16,7 @@ spec:
         app: ingress-test
     spec:
       containers:
-        - image: ruby:3.1.0
+        - image: ruby:3.1.2
           name: ruby
           command: [ruby]
           args:

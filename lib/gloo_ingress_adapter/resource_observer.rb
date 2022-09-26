@@ -7,6 +7,7 @@ module GlooIngressAdapter
   class ResourceObserver
     HTTP_GONE = 410
 
+    # Message sent to reset observation
     class ResetMessage
       attr_reader :observer
 

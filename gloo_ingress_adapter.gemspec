@@ -34,7 +34,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = %w[lib]
 
   spec.add_dependency "activesupport", "~> 7.0"
-  spec.add_dependency "kubeclient", "~> 4.9"
+  spec.add_dependency "kubeclient", "~> 4.10"
   spec.add_dependency "zeitwerk", "~> 2.4"
 
   spec.add_development_dependency "cheetah", "~> 1.0"
